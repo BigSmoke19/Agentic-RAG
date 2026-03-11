@@ -1,0 +1,15 @@
+# LLM Client
+huggingface-hub
+
+# Wikipedia API
+wikipediaapi
+
+# RAG & Embeddings
+chromadb
+sentence-transformers
+
+# Web Search
+duckduckgo-search
+
+# Environment
+python-dotenv
