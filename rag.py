@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 import chromadb
 from chromadb.utils import embedding_functions
-from huggingface_hub import InferenceClient
+from groq import Groq
 
 load_dotenv()
 
@@ -19,11 +19,8 @@ collection = chroma_client.get_or_create_collection(
     name = collection_name, embedding_function=huggingface_ef
 )
 
-# Hugging Face Client
-client = InferenceClient(
-    model="meta-llama/Llama-3.1-8B-Instruct",
-    token=os.getenv("HF_TOKEN")
-)
+# Groq Face Client
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 """
 # Function to load documents from a directory
 def load_documents_from_directory(directory_path):
@@ -110,8 +107,8 @@ def generate_response(question, relevant_chunks):
         "\n\nContext:\n" + context + "\n\nQuestion:\n" + question
     )
 
-    response = client.chat_completion(
-            model="mistralai/Mistral-7B-Instruct-v0.2",
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
             messages=[
                 {
                     "role": "system",
@@ -128,12 +125,12 @@ def generate_response(question, relevant_chunks):
     answer = response.choices[0].message.content  # add .content at the end
     return answer
 
+if __name__ == "__main__":
+    # Example query and response generation
+    question = "who won the champions league final in 2015?"
+    relevant_chunks = query_documents(question)
+    answer = generate_response(question, relevant_chunks)
 
-# Example query and response generation
-question = "who won the champions league final in 2015?"
-relevant_chunks = query_documents(question)
-answer = generate_response(question, relevant_chunks)
-
-print(answer)
+    print(answer)
 
 

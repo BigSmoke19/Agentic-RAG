@@ -1,13 +1,14 @@
-from duckduckgo_search import DDGS
-from huggingface_hub import InferenceClient
+from ddgs import DDGS
+from groq import Groq
 import json
 import os
 from dotenv import load_dotenv
 from rag import query_documents, generate_response
+import re
 
 load_dotenv()
 
-client = InferenceClient(token=os.getenv("HF_TOKEN"))
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 # Define your tools
 def search_web(query: str) -> str:
@@ -37,18 +38,47 @@ available_tools = {
     "get_current_date": get_current_date
 }
 
-# Agent loop
-def run_agent(user_question: str):
+import re
+
+def extract_json(text: str) -> dict:
+    """Extract JSON from model response even if it has extra text around it"""
+    # Try direct parse first
+    try:
+        return json.loads(text)
+    except:
+        pass
+    
+    # Try to find JSON pattern in the text
+    try:
+        match = re.search(r'\{.*?\}', text, re.DOTALL)
+        if match:
+            return json.loads(match.group())
+    except:
+        pass
+    
+    # No JSON found — treat as final answer
+    return {"tool": "none", "answer": text}
+
+
+def run_agent(user_question: str, silent: bool = False):
     messages = [
         {
             "role": "system",
             "content": """You are a helpful agent with these tools:
-            - search_documents(query): search internal documents
-            - search_web(query): search the internet
+            - search_documents(query): search internal football documents ONLY
+            - search_web(query): search the internet for any general knowledge
             - calculator(expression): do math
             - get_current_date(): get today's date
 
-            Always respond in valid JSON only:
+            RULES:
+            1. For football questions → use search_documents FIRST
+            2. For non-football questions → use search_web DIRECTLY
+            3. If search_documents returns garbage → switch to search_web immediately
+            4. NEVER search for the same thing twice
+            5. After getting a tool result → give final answer immediately
+            6. If results are imperfect → still give best answer from available info
+
+            Always respond in valid JSON only — no extra text, no explanation:
             {"tool": "tool_name", "input": "your input"}
             
             When you have enough info to answer:
@@ -58,59 +88,87 @@ def run_agent(user_question: str):
         {"role": "user", "content": user_question}
     ]
 
-    while True:
-        response = client.chat_completion(
-            model="meta-llama/Llama-3.1-8B-Instruct",
+    tools_used = []
+
+    for iteration in range(5):
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
             messages=messages,
             max_tokens=512
         )
 
         reply = response.choices[0].message.content
-        
-        try:
-            parsed = json.loads(reply)
-        except:
-            return reply  # model gave direct answer
 
-        # Final answer
+        parsed = extract_json(reply)
+
         if parsed["tool"] == "none":
-            return parsed["answer"]
+            return {"answer": parsed["answer"], "tools_used": tools_used}
 
-        # Call the tool
         tool_name = parsed["tool"]
         tool_input = parsed.get("input", "")
-        
-        print(f"🔧 Using tool: {tool_name} with input: {tool_input}")
-        
+
+        # Prevent duplicate tool calls
+        already_used = any(
+            t["tool"] == tool_name and t["input"] == tool_input
+            for t in tools_used
+        )
+        if already_used:
+            return {
+                "answer": "Could not find a definitive answer.",
+                "tools_used": tools_used
+            }
+
+        tools_used.append({"tool": tool_name, "input": tool_input})
+
+        if not silent:
+            print(f"🔧 Using tool: {tool_name} with input: {tool_input}")
+
         if tool_name in available_tools:
-            if tool_input:
-                tool_result = available_tools[tool_name](tool_input)
-            else:
-                tool_result = available_tools[tool_name]()
+            tool_result = available_tools[tool_name](tool_input) if tool_input else available_tools[tool_name]()
         else:
             tool_result = "Tool not found"
 
-        # Feed result back to agent
         messages.append({"role": "assistant", "content": reply})
-        messages.append({"role": "user", "content": f"Tool result: {tool_result}"})
+        messages.append({
+            "role": "user",
+            "content": f"Tool result: {tool_result}\n\nNow give your final answer immediately."
+        })
 
-print("""
-    > Available Options:    
-    - search documents(query): search internal Football documents
-    - search web(query): search the internet
-    - calculator(expression): do math
-    - get current date: get today's date\n
-    e.g queries
-       who won the champions league final in 2013?
-       3*8+2
-       display current date
-       quit
-    """)
+    return {"answer": "Could not complete within allowed steps.", "tools_used": tools_used}
 
-# Run it
-while True:
-    question = input("You: ")
-    if question.lower() == "quit":
-        break
-    answer = run_agent(question)
-    print(f"Agent: {answer}\n")
+
+def get_answer(user_question: str) -> str:
+    """Clean function that returns just the answer string - use this for evals"""
+    result = run_agent(user_question)
+    return result["answer"]
+
+if __name__ == "__main__":
+
+    print("""
+        > Available Options:    
+        - search documents(query): search internal Football documents
+        - search web(query): search the internet
+        - calculator(expression): do math
+        - get current date: get today's date\n
+        e.g queries
+        who won the champions league final in 2013?
+        3*8+2
+        display current date
+        quit\n
+        """)
+
+    # Run it# Run it
+    while True:
+        question = input("You: ")
+        if question.lower() == "quit":
+            print("Goodbye!")
+            break
+        
+        result = run_agent(question)
+        
+        print(f"\nAgent: {result['answer']}")
+        
+        if result['tools_used']:
+            print(f"🔧 Tools used: {[t['tool'] for t in result['tools_used']]}")
+        
+        print()
