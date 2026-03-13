@@ -9,7 +9,7 @@ chromadb
 sentence-transformers
 
 # Web Search
-duckduckgo-search
+ddgs
 
 # Environment
 python-dotenv
@@ -20,4 +20,4 @@ uvicorn
 
 pydantic
 
-ddgs
+
