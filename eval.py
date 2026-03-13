@@ -1,7 +1,7 @@
 from groq import Groq
 import os
 from dotenv import load_dotenv
-from main import get_answer
+from agent import get_answer
 
 load_dotenv()
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
