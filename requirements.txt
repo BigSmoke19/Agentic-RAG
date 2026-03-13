@@ -20,4 +20,6 @@ uvicorn
 
 pydantic
 
+fastapi
+
 
