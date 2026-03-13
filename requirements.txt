@@ -2,7 +2,7 @@
 huggingface-hub
 
 # Wikipedia API
-wikipediaapi
+wikipedia-api
 
 # RAG & Embeddings
 chromadb
