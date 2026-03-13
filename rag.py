@@ -3,14 +3,31 @@ from dotenv import load_dotenv
 import chromadb
 from chromadb.utils import embedding_functions
 from groq import Groq
+from sentence_transformers import SentenceTransformer
 
 load_dotenv()
 
 
 #HF Embedding function
-huggingface_ef = embedding_functions.SentenceTransformerEmbeddingFunction(
-    model_name="all-MiniLM-L6-v2"
-) 
+local_model = SentenceTransformer("all-MiniLM-L6-v2")
+
+def get_embedding(text: str) -> list[float]:
+    return local_model.encode(text[:512]).tolist()
+
+class HFEmbeddingFunction:
+    def name(self) -> str:
+        return "sentence_transformer"
+
+    def __call__(self, input: list[str]) -> list[list[float]]:
+        return [get_embedding(text) for text in input]
+
+    def embed_documents(self, input: list[str]) -> list[list[float]]:
+        return [get_embedding(text) for text in input]
+
+    def embed_query(self, input: list[str]) -> list[list[float]]:
+        return [get_embedding(text) for text in input]
+
+huggingface_ef = HFEmbeddingFunction()
 
 #Intialize Chroma client wiht persistence
 chroma_client = chromadb.PersistentClient(path="chroma_persistent_storage")
@@ -21,7 +38,9 @@ collection = chroma_client.get_or_create_collection(
 
 # Groq Face Client
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
 """
+
 # Function to load documents from a directory
 def load_documents_from_directory(directory_path):
     print("==== Loading documents from directory ====")
@@ -61,20 +80,10 @@ for doc in documents:
 
 # print(f"Split documents into {len(chunked_documents)} chunks")
 
-# Function to generate embeddings using OpenAI API
-def get_hf_embedding(text):
-    embedding = client.feature_extraction(
-        text,
-        model="sentence-transformers/all-MiniLM-L6-v2"
-    )
-    print("==== Generating embeddings... ====")
-    return embedding.tolist()
-
-
 # Generate embeddings for the document chunks
 for doc in chunked_documents:
     print("==== Generating embeddings... ====")
-    doc["embedding"] = get_hf_embedding(doc["text"])
+    doc["embedding"] = get_embedding(doc["text"])
 
 ##print(doc["embedding"])
 
@@ -86,6 +95,7 @@ for doc in chunked_documents:
     )
 
 """
+
 # Function to query documents
 def query_documents(question, n_results=2):
     # query_embedding = get_openai_embedding(question)
@@ -132,5 +142,3 @@ if __name__ == "__main__":
     answer = generate_response(question, relevant_chunks)
 
     print(answer)
-
-
