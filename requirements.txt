@@ -1,5 +1,5 @@
 # LLM Client
-huggingface-hub
+groq
 
 # Wikipedia API
 wikipedia-api
@@ -13,3 +13,11 @@ duckduckgo-search
 
 # Environment
 python-dotenv
+
+slowapi
+
+uvicorn
+
+pydantic
+
+ddgs
